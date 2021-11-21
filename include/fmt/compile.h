@@ -309,7 +309,9 @@ template <typename Char, typename T, int N> struct spec_field {
                                        const Args&... args) const {
     const auto& vargs =
         fmt::make_format_args<basic_format_context<OutputIt, Char>>(args...);
-    basic_format_context<OutputIt, Char> ctx(out, vargs);
+    auto const& primary_vargs =
+        fmt::make_format_args<basic_format_context<detail::buffer_appender<Char>, Char>>(args...);
+    basic_format_context<OutputIt, Char> ctx(out, vargs, primary_vargs);
     return fmt.format(get_arg_checked<T, N>(args...), ctx);
   }
 };

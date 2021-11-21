@@ -1698,10 +1698,18 @@ template <typename OutputIt, typename Char> class basic_format_context {
  public:
   /** The character type for the output. */
   using char_type = Char;
+  using primary_context = basic_format_context<detail::buffer_appender<Char>, Char>;
+  static constexpr bool is_primary = std::same_as<basic_format_context, primary_context>;
 
  private:
   OutputIt out_;
   basic_format_args<basic_format_context> args_;
+  struct empty { };
+  [[no_unique_address]] std::conditional_t<
+      is_primary,
+      empty,
+      basic_format_args<primary_context>
+      > primary_args_;
   detail::locale_ref loc_;
 
  public:
@@ -1719,8 +1727,14 @@ template <typename OutputIt, typename Char> class basic_format_context {
    */
   constexpr basic_format_context(
       OutputIt out, basic_format_args<basic_format_context> ctx_args,
-      detail::locale_ref loc = detail::locale_ref())
+      detail::locale_ref loc = detail::locale_ref()) requires is_primary
       : out_(out), args_(ctx_args), loc_(loc) {}
+
+  constexpr basic_format_context(
+      OutputIt out, basic_format_args<basic_format_context> ctx_args,
+      basic_format_args<primary_context> ctx_args_primary,
+      detail::locale_ref loc = detail::locale_ref()) requires (!is_primary)
+      : out_(out), args_(ctx_args), primary_args_(ctx_args_primary), loc_(loc) {}
 
   constexpr auto arg(int id) const -> format_arg { return args_.get(id); }
   FMT_CONSTEXPR auto arg(basic_string_view<char_type> name) -> format_arg {
@@ -1731,6 +1745,9 @@ template <typename OutputIt, typename Char> class basic_format_context {
   }
   auto args() const -> const basic_format_args<basic_format_context>& {
     return args_;
+  }
+  auto primary_args() const -> const basic_format_args<primary_context>& {
+    return primary_args_;
   }
 
   FMT_CONSTEXPR auto error_handler() -> detail::error_handler { return {}; }
