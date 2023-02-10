@@ -406,3 +406,36 @@ TEST(ranges_test, range_of_range_of_mixed_const) {
 TEST(ranges_test, vector_char) {
   EXPECT_EQ(fmt::format("{}", std::vector<char>{'a', 'b'}), "['a', 'b']");
 }
+
+struct CalledParse {};
+
+template <> struct fmt::formatter<CalledParse> {
+  bool called_parse = false;
+  bool is_debug = false;
+
+  constexpr auto parse(auto& ctx) {
+    if (is_debug) FMT_THROW(fmt::format_error("set_debug called prematurely"));
+    called_parse = true;
+    return ctx.begin();
+  }
+
+  constexpr void set_debug_format(bool flag) { is_debug = flag; }
+
+  auto format(CalledParse, auto& ctx) const {
+    if (not called_parse) FMT_THROW(fmt::format_error("didn't call parse"));
+    return fmt::format_to(ctx.out(), "{}", is_debug);
+  }
+};
+
+TEST(ranges_test, debug_only) {
+  std::vector<CalledParse> v = {CalledParse{}};
+  std::vector<std::vector<CalledParse>> vv = {v};
+  EXPECT_EQ(fmt::format("{}", v), "[true]");
+  EXPECT_EQ(fmt::format("{:}", v), "[true]");
+  EXPECT_EQ(fmt::format("{::}", v), "[false]");
+
+  EXPECT_EQ(fmt::format("{}", vv), "[[true]]");
+  EXPECT_EQ(fmt::format("{:}", vv), "[[true]]");
+  EXPECT_EQ(fmt::format("{::}", vv), "[[true]]");
+  EXPECT_EQ(fmt::format("{:::}", vv), "[[false]]");
+}

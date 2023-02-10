@@ -157,8 +157,7 @@ struct has_mutable_begin_end<
               decltype(detail::range_end(std::declval<T>())),
               // the extra int here is because older versions of MSVC don't
               // SFINAE properly unless there are distinct types
-              int>>
-    : std::true_type {};
+              int>> : std::true_type {};
 
 template <typename T>
 struct is_range_<T, void>
@@ -431,7 +430,6 @@ struct range_formatter<
                     detail::has_fallback_formatter<T, Char>>>::value>> {
  private:
   detail::range_formatter_type<Char, T> underlying_;
-  bool custom_specs_ = false;
   basic_string_view<Char> separator_ = detail::string_literal<Char, ',', ' '>{};
   basic_string_view<Char> opening_bracket_ =
       detail::string_literal<Char, '['>{};
@@ -452,7 +450,7 @@ struct range_formatter<
   }
 
  public:
-  FMT_CONSTEXPR range_formatter() { maybe_set_debug_format(true); }
+  FMT_CONSTEXPR range_formatter() { maybe_set_debug_format(false); }
 
   FMT_CONSTEXPR auto underlying() -> detail::range_formatter_type<Char, T>& {
     return underlying_;
@@ -478,16 +476,21 @@ struct range_formatter<
       ++it;
     }
 
-    if (it == end || *it == '}') return it;
-
-    if (*it != ':')
+    if (it != end && *it != ':' && *it != '}')
       FMT_THROW(format_error("no other top-level range formatters supported"));
 
-    maybe_set_debug_format(false);
-    custom_specs_ = true;
-    ++it;
+    bool custom_specs = false;
+    if (it != end && *it == ':') {
+      custom_specs = true;
+      ++it;
+    }
     ctx.advance_to(it);
-    return underlying_.parse(ctx);
+
+    auto out = underlying_.parse(ctx);
+    if (not custom_specs) {
+      maybe_set_debug_format(true);
+    }
+    return out;
   }
 
   template <typename R, class FormatContext>
