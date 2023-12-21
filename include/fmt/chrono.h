@@ -677,6 +677,7 @@ FMT_CONSTEXPR auto parse_chrono_format(const Char* begin, const Char* end,
   if (*begin != '%') FMT_THROW(format_error("invalid format"));
   auto ptr = begin;
   pad_type pad = pad_type::unspecified;
+  int asked_precision = -1;
   while (ptr != end) {
     auto c = *ptr;
     if (c == '}') break;
@@ -700,6 +701,14 @@ FMT_CONSTEXPR auto parse_chrono_format(const Char* begin, const Char* end,
     case '0':
       pad = pad_type::zero;
       ++ptr;
+      break;
+    case '.':
+      ++ptr;  // consume '.'
+      if (ptr == end) FMT_THROW(format_error("invalid format"));
+      asked_precision = parse_nonnegative_int(ptr, end, -1);
+      if (asked_precision == -1) FMT_THROW(format_error("invalid format"));
+      if (ptr == end || (*ptr != 's' && *ptr != 'S'))
+        FMT_THROW(format_error("invalid format"));
       break;
     }
     if (ptr == end) FMT_THROW(format_error("invalid format"));
@@ -788,9 +797,12 @@ FMT_CONSTEXPR auto parse_chrono_format(const Char* begin, const Char* end,
       handler.on_minute(numeric_system::standard, pad);
       break;
     case 'S':
-      handler.on_second(numeric_system::standard, pad);
+      handler.on_second(numeric_system::standard, pad, asked_precision);
       break;
     // Other:
+    case 's':
+      handler.on_second_since_epoch(numeric_system::standard, asked_precision);
+      break;
     case 'c':
       handler.on_datetime(numeric_system::standard);
       break;
@@ -902,7 +914,7 @@ FMT_CONSTEXPR auto parse_chrono_format(const Char* begin, const Char* end,
         handler.on_minute(numeric_system::alternative, pad);
         break;
       case 'S':
-        handler.on_second(numeric_system::alternative, pad);
+        handler.on_second(numeric_system::alternative, pad, asked_precision);
         break;
       case 'z':
         handler.on_utc_offset(numeric_system::alternative);
@@ -989,7 +1001,7 @@ struct tm_format_checker : null_chrono_spec_handler<tm_format_checker> {
   FMT_CONSTEXPR void on_24_hour(numeric_system, pad_type) {}
   FMT_CONSTEXPR void on_12_hour(numeric_system, pad_type) {}
   FMT_CONSTEXPR void on_minute(numeric_system, pad_type) {}
-  FMT_CONSTEXPR void on_second(numeric_system, pad_type) {}
+  FMT_CONSTEXPR void on_second(numeric_system, pad_type, int = -1) {}
   FMT_CONSTEXPR void on_datetime(numeric_system) {}
   FMT_CONSTEXPR void on_loc_date(numeric_system) {}
   FMT_CONSTEXPR void on_loc_time(numeric_system) {}
@@ -1001,6 +1013,7 @@ struct tm_format_checker : null_chrono_spec_handler<tm_format_checker> {
   FMT_CONSTEXPR void on_am_pm() {}
   FMT_CONSTEXPR void on_utc_offset(numeric_system) {}
   FMT_CONSTEXPR void on_tz_name() {}
+  FMT_CONSTEXPR void on_second_since_epoch(numeric_system, int = -1) {}
 };
 
 inline auto tm_wday_full_name(int wday) -> const char* {
@@ -1091,7 +1104,8 @@ struct count_fractional_digits<Num, Den, N, false> {
 // Format subseconds which are given as an integer type with an appropriate
 // number of digits.
 template <typename Char, typename OutputIt, typename Duration>
-void write_fractional_seconds(OutputIt& out, Duration d, int precision = -1) {
+void write_fractional_seconds(OutputIt& out, Duration d, int precision = -1,
+                              bool decimal = true) {
   constexpr auto num_fractional_digits =
       count_fractional_digits<Duration::period::num,
                               Duration::period::den>::value;
@@ -1115,12 +1129,12 @@ void write_fractional_seconds(OutputIt& out, Duration d, int precision = -1) {
     FMT_ASSERT(!std::is_floating_point<typename Duration::rep>::value, "");
     if (std::ratio_less<typename subsecond_precision::period,
                         std::chrono::seconds::period>::value) {
-      *out++ = '.';
+      if (decimal) *out++ = '.';
       out = std::fill_n(out, leading_zeroes, '0');
       out = format_decimal<Char>(out, n, num_digits).end;
     }
-  } else {
-    *out++ = '.';
+  } else if (precision != 0) {
+    if (decimal) *out++ = '.';
     leading_zeroes = (std::min)(leading_zeroes, precision);
     out = std::fill_n(out, leading_zeroes, '0');
     int remaining = precision - leading_zeroes;
@@ -1562,7 +1576,7 @@ class tm_writer {
     format_localized('M', 'O');
   }
 
-  void on_second(numeric_system ns, pad_type pad) {
+  void on_second(numeric_system ns, pad_type pad, int asked_precision = -1) {
     if (is_classic_ || ns == numeric_system::standard) {
       write2(tm_sec(), pad);
       if (subsecs_) {
@@ -1574,12 +1588,51 @@ class tm_writer {
             out_ = std::copy(buf.begin() + 1, buf.end(), out_);
           }
         } else {
-          write_fractional_seconds<Char>(out_, *subsecs_);
+          write_fractional_seconds<Char>(out_, *subsecs_, asked_precision);
+        }
+      } else if (asked_precision > 0) {
+        *out_++ = '.';
+        for (int i = 0; i != asked_precision; ++i) {
+          *out_++ = '0';
         }
       }
     } else {
       // Currently no formatting of subseconds when a locale is set.
       format_localized('S', 'O');
+    }
+  }
+
+  void on_second_since_epoch(numeric_system, int asked_precision = -1) {
+    const long days_from_civil = [&] {
+      long y = tm_.tm_year + 1900;
+      unsigned int m = tm_.tm_mon + 1;
+      unsigned int d = tm_.tm_mday;
+
+      y -= m <= 2;
+      const int era = (y >= 0 ? y : y - 399) / 400;
+      const unsigned yoe = static_cast<unsigned>(y - era * 400);  // [0, 399]
+      const unsigned doy =
+          (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;  // [0, 365]
+      const unsigned doe =
+          yoe * 365 + yoe / 4 - yoe / 100 + doy;  // [0, 146096]
+      return era * 146097 + static_cast<long>(doe) - 719468;
+    }();
+
+    const long seconds = days_from_civil * 86400 + tm_.tm_hour * 3600 +
+                         tm_.tm_min * 60 + tm_.tm_sec;
+
+    // unconditinoally write this part
+    out_ = write<Char>(out_, seconds);
+
+    // then, if there are subseconds
+    if (asked_precision != 0) {
+      if (subsecs_) {
+        write_fractional_seconds<Char>(out_, *subsecs_, asked_precision, false);
+      } else if (asked_precision != -1) {
+        for (int i = 0; i != asked_precision; ++i) {
+          *out_++ = '0';
+        }
+      }
     }
   }
 
@@ -1631,7 +1684,7 @@ struct chrono_format_checker : null_chrono_spec_handler<chrono_format_checker> {
   FMT_CONSTEXPR void on_24_hour(numeric_system, pad_type) {}
   FMT_CONSTEXPR void on_12_hour(numeric_system, pad_type) {}
   FMT_CONSTEXPR void on_minute(numeric_system, pad_type) {}
-  FMT_CONSTEXPR void on_second(numeric_system, pad_type) {}
+  FMT_CONSTEXPR void on_second(numeric_system, pad_type, int = -1) {}
   FMT_CONSTEXPR void on_12_hour_time() {}
   FMT_CONSTEXPR void on_24_hour_time() {}
   FMT_CONSTEXPR void on_iso_time() {}
@@ -1642,6 +1695,7 @@ struct chrono_format_checker : null_chrono_spec_handler<chrono_format_checker> {
     }
   }
   FMT_CONSTEXPR void on_duration_unit() {}
+  FMT_CONSTEXPR void on_second_since_epoch(numeric_system, int = -1) {}
 };
 
 template <typename T,
@@ -1930,7 +1984,7 @@ struct chrono_formatter {
     format_tm(time, &tm_writer_type::on_minute, ns, pad);
   }
 
-  void on_second(numeric_system ns, pad_type pad) {
+  void on_second(numeric_system ns, pad_type pad, int asked_precision = -1) {
     if (handle_nan_inf()) return;
 
     if (ns == numeric_system::standard) {
@@ -1952,8 +2006,10 @@ struct chrono_formatter {
     }
     auto time = tm();
     time.tm_sec = to_nonnegative_int(second(), 60);
-    format_tm(time, &tm_writer_type::on_second, ns, pad);
+    format_tm(time, &tm_writer_type::on_second, ns, pad, precision);
   }
+
+  void on_second_since_epoch(numeric_system, int = -1) { *out++ = 'x'; }
 
   void on_12_hour_time() {
     if (handle_nan_inf()) return;
