@@ -1028,3 +1028,21 @@ TEST(chrono_test, out_of_range) {
   auto d = std::chrono::duration<unsigned long, std::giga>(538976288);
   EXPECT_THROW((void)fmt::format("{:%j}", d), fmt::format_error);
 }
+
+TEST(chrono_test, p2945) {
+  auto now = std::chrono::system_clock::time_point(
+      std::chrono::nanoseconds(1703044591'873515968ULL));
+
+  EXPECT_EQ(fmt::format("{:%H:%M:%S}", now), "03:56:31.873515968");
+  EXPECT_EQ(fmt::format("{:%H:%M:%.0S}", now), "03:56:31");
+  EXPECT_EQ(fmt::format("{:%H:%M:%.3S}", now), "03:56:31.873");
+  EXPECT_EQ(fmt::format("{:%H:%M:%.6S}", now), "03:56:31.873515");
+  EXPECT_EQ(fmt::format("{:%H:%M:%.9S}", now), "03:56:31.873515968");
+
+  EXPECT_EQ(fmt::format("{:%s}", now), "1703044591873515968");
+  EXPECT_EQ(fmt::format("{:%.0s}", now), "1703044591");
+  EXPECT_EQ(fmt::format("{:%.1s}", now), "17030445918");
+  EXPECT_EQ(fmt::format("{:%.2s}", now), "170304459187");
+  EXPECT_EQ(fmt::format("{:%.3s}", now), "1703044591873");
+  EXPECT_EQ(fmt::format("{:%.6s}", now), "1703044591873515");
+}
