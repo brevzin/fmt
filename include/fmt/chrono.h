@@ -18,7 +18,6 @@
 #include <ostream>
 #include <type_traits>
 
-#include "fmt/core.h"
 #include "format.h"
 
 FMT_BEGIN_NAMESPACE
