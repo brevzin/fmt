@@ -1588,6 +1588,11 @@ class tm_writer {
         } else {
           write_fractional_seconds<Char>(out_, *subsecs_, asked_precision);
         }
+      } else if (asked_precision > 0) {
+        *out_++ = '.';
+        for (int i = 0; i != asked_precision; ++i) {
+          *out_++ = '0';
+        }
       }
     } else {
       // Currently no formatting of subseconds when a locale is set.
@@ -1619,7 +1624,13 @@ class tm_writer {
 
     // then, if there are subseconds
     if (asked_precision != 0) {
-      write_fractional_seconds<Char>(out_, *subsecs_, asked_precision, false);
+      if (subsecs_) {
+        write_fractional_seconds<Char>(out_, *subsecs_, asked_precision, false);
+      } else if (asked_precision != -1) {
+        for (int i = 0; i != asked_precision; ++i) {
+          *out_++ = '0';
+        }
+      }
     }
   }
 

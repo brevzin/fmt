@@ -1045,4 +1045,24 @@ TEST(chrono_test, p2945) {
   EXPECT_EQ(fmt::format("{:%.2s}", now), "170304459187");
   EXPECT_EQ(fmt::format("{:%.3s}", now), "1703044591873");
   EXPECT_EQ(fmt::format("{:%.6s}", now), "1703044591873515");
+
+  auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
+  EXPECT_EQ(fmt::format("{:%S}", now_ms), "31.873");
+  EXPECT_EQ(fmt::format("{:%.0S}", now_ms), "31");
+  EXPECT_EQ(fmt::format("{:%.3S}", now_ms), "31.873");
+  EXPECT_EQ(fmt::format("{:%.6S}", now_ms), "31.873000");
+  EXPECT_EQ(fmt::format("{:%s}", now_ms), "1703044591873");
+  EXPECT_EQ(fmt::format("{:%.0s}", now_ms), "1703044591");
+  EXPECT_EQ(fmt::format("{:%.3s}", now_ms), "1703044591873");
+  EXPECT_EQ(fmt::format("{:%.6s}", now_ms), "1703044591873000");
+
+  auto now_s = std::chrono::time_point_cast<std::chrono::seconds>(now);
+  EXPECT_EQ(fmt::format("{:%S}", now_s), "31");
+  EXPECT_EQ(fmt::format("{:%.0S}", now_s), "31");
+  EXPECT_EQ(fmt::format("{:%.3S}", now_s), "31.000");
+  EXPECT_EQ(fmt::format("{:%.6S}", now_s), "31.000000");
+  EXPECT_EQ(fmt::format("{:%s}", now_s), "1703044591");
+  EXPECT_EQ(fmt::format("{:%.0s}", now_s), "1703044591");
+  EXPECT_EQ(fmt::format("{:%.3s}", now_s), "1703044591000");
+  EXPECT_EQ(fmt::format("{:%.6s}", now_s), "1703044591000000");
 }
