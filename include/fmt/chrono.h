@@ -707,6 +707,8 @@ FMT_CONSTEXPR auto parse_chrono_format(const Char* begin, const Char* end,
       if (ptr == end) FMT_THROW(format_error("invalid format"));
       asked_precision = parse_nonnegative_int(ptr, end, -1);
       if (asked_precision == -1) FMT_THROW(format_error("invalid format"));
+      if (ptr == end || (*ptr != 's' && *ptr != 'S'))
+        FMT_THROW(format_error("invalid format"));
       break;
     }
     if (ptr == end) FMT_THROW(format_error("invalid format"));
