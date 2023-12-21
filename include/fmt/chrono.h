@@ -1987,13 +1987,13 @@ struct chrono_formatter {
       } else {
         write(second(), 2, pad);
         write_fractional_seconds<char_type>(
-            out, std::chrono::duration<rep, Period>(val), asked_precision);
+            out, std::chrono::duration<rep, Period>(val), precision);
       }
       return;
     }
     auto time = tm();
     time.tm_sec = to_nonnegative_int(second(), 60);
-    format_tm(time, &tm_writer_type::on_second, ns, pad, asked_precision);
+    format_tm(time, &tm_writer_type::on_second, ns, pad, precision);
   }
 
   void on_second_since_epoch(numeric_system, int = -1) { *out++ = 'x'; }
